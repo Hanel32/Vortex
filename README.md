@@ -370,10 +370,10 @@ Vortex can be compiled on Windows and Linux, each explained in a separate sectio
 
 3. **Due to time limitations,** file I/O benchmarks have not been ported to Linux due to the extra effort needed to rewrite the overlapped I/O model of Windows.
 
-4. **Vortex can be compiled and run via the commandline** with the included makefile in directory Vortex/Vortex. Simply move folder Vortex/Vortex onto a Linux server, and *cd* to the Vortex directory. 
+4. **Vortex can be compiled and run via the commandline** with the included makefile in directory Vortex-1.0/Vortex. Simply move the folder Vortex-1.0/Vortex onto a Linux server, and *cd* to the Vortex directory. 
 
 ```
-$ cd /Vortex
+$ cd Vortex
 ```
 
 5. **From within the directory**, issue the *make* command. 
@@ -404,7 +404,7 @@ $ ./Vortex
 
 ## License
 
-This project is licensed under the GPLv3.0 License - see the [**LICENSE.txt**](LICENSE.txt) file for details
+This project is licensed under the GPLv3.0 License - see the [**LICENSE**](LICENSE) file for details
 
 ## Authors
 
