@@ -5,7 +5,6 @@
 # Vortex: Extreme-Performance Streaming and Radix Sorting
 
 [![GPLv3 license](https://img.shields.io/badge/License-GPLv3-blue.svg?style=plastic&logo=appveyor)](LICENSE)
-[![Github all releases](https://img.shields.io/github/downloads/Naereen/StrapDown.js/total.svg?style=plastic&logo=appveyor)](https://GitHub.com/Naereen/StrapDown.js/releases/)
 
 This repository contains the implementation of the streaming and sorting algorithms described in the [**Vortex paper**](https://dl.acm.org/doi/10.1145/3373376.3378527) which was developed by the [**Texas A&M University Internet Research Lab**](http://irl.cs.tamu.edu/projects/streams/) and published in the [**ACM ASPLOS 2020**](https://asplos-conference.org/) conference hosted virtually in Lausanne, Switzerland. The ACM-hosted virtual presentation of the paper can be viewed [**here**](https://www.youtube.com/watch?v=yF9j_KgH1_U).
 
