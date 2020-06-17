@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://github.com/chingy1510/Vortex_Test/blob/master/Vortex%20Charts/cloth.jpg?raw=true">
+  <img src="https://github.com/Hanel32/Vortex/blob/master/Image/header.jpg?raw=true">
 </p>
 
 # Vortex: Extreme-Performance Streaming and Radix Sorting
