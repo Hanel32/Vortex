@@ -13,12 +13,12 @@ Many applications in data analytics, information retrieval, and cluster computin
 
 ## Performance
 
-As a quick preview of Vortex sorting and streaming performance, in the tables below we analyze the Vortex 1.) single-threaded sorting performance, 2.) batched producer-consumer throughput, 3.) file I/O speed in the context of prior methods when processing uniform, 64-bit keys across various Intel CPU architectures outfitted with 32 GB of RAM. For a richer discussion and broader set of Vortex abstraction benchmarks, please refer to the [**ASPLOS publication**](https://dl.acm.org/doi/10.1145/3373376.3378527), which extensively discusses Vortex streaming and sorting.
+As a quick preview of Vortex sorting and streaming performance, in the tables below we analyze the Vortex 1) single-threaded sorting performance, 2) batched producer-consumer throughput, 3) file I/O speed. All machines were outfitted with 32 GB of RAM. For a richer discussion and broader set of Vortex abstraction benchmarks, please refer to the [**ASPLOS publication**](https://dl.acm.org/doi/10.1145/3373376.3378527), which extensively discusses Vortex streaming and sorting.
 
 <table align="center">
 <thead>
   <tr>
-    <th colspan="8">Out-Of-Place Sort Speeds (M keys/s)</th>
+    <th colspan="8">Out-Of-Place Sort Speeds (M keys/s, 64-bit keys)</th>
   </tr>
 </thead>
 <tbody>
@@ -29,12 +29,12 @@ As a quick preview of Vortex sorting and streaming performance, in the tables be
     <td align="center" colspan="3"><b><sub>24 GB of keys</sub></b></td>
   </tr>
   <tr>
-    <td align="center"><b><sub>Sandy Bridge</sub></b></td>
-    <td align="center"><b><sub>Ivy Bridge</sub></b></td>
-    <td align="center"><b><sub>Skylake-X</sub></b></td>
-    <td align="center"><b><sub>Sandy Bridge</sub></b></td>
-    <td align="center"><b><sub>Ivy Bridge</sub></b></td>
-    <td align="center"><b><sub>Skylake-X</sub></b></td>
+    <td align="center"><b><sub>i7-3930K</sub></b></td>
+    <td align="center"><b><sub>i7-4930K</sub></b></td>
+    <td align="center"><b><sub>i7-7820X</sub></b></td>
+    <td align="center"><b><sub>i7-3930K</sub></b></td>
+    <td align="center"><b><sub>i7-4930K</sub></b></td>
+    <td align="center"><b><sub>i7-7820X</sub></b></td>
   </tr>
   <tr>
     <td><b><a href="https://www.cubic.org/docs/download/radix_ar_2011.cpp"><sub>Reinald-Harris-Rohrer Sort (LSD)</sub></a></b></td>
@@ -85,7 +85,7 @@ As a quick preview of Vortex sorting and streaming performance, in the tables be
 <table align="center">
 <thead>
   <tr>
-    <th colspan="8"><b>In-Place Sort Speeds (M keys/s)</b></th>
+    <th colspan="8"><b>In-Place Sort Speeds (M keys/s, 64-bit keys)</b></th>
   </tr>
 </thead>
 <tbody>
@@ -96,12 +96,12 @@ As a quick preview of Vortex sorting and streaming performance, in the tables be
     <td align="center" colspan="3"><b><sub>24 GB of keys</sub></b></td>
   </tr>
   <tr>
-    <td align="center"><b><sub>Sandy Bridge</sub></b></td>
-    <td align="center"><b><sub>Ivy Bridge</sub></b></td>
-    <td align="center"><b><sub>Skylake-X</sub></b></td>
-    <td align="center"><b><sub>Sandy Bridge</sub></b></td>
-    <td align="center"><b><sub>Ivy Bridge</sub></b></td>
-    <td align="center"><b><sub>Skylake-X</sub></b></td>
+    <td align="center"><b><sub>i7-3930K</sub></b></td>
+    <td align="center"><b><sub>i7-4930K</sub></b></td>
+    <td align="center"><b><sub>i7-7820X</sub></b></td>
+    <td align="center"><b><sub>i7-3930K</sub></b></td>
+    <td align="center"><b><sub>i7-4930K</sub></b></td>
+    <td align="center"><b><sub>i7-7820X</sub></b></td>
   </tr>
   <tr>
     <td><b><a href="https://github.com/gorset/radix"><sub>Gorset Sort (MSD)</sub></a></b></td>
@@ -198,12 +198,12 @@ As a quick preview of Vortex sorting and streaming performance, in the tables be
     <td rowspan="2" align="center"><b><sub>RAM</sub></b></td>
   </tr>
   <tr>
-    <td align="center"><b><sub>Sandy Bridge</sub></b></td>
-    <td align="center"><b><sub>Ivy Bridge</sub></b></td>
-    <td align="center"><b><sub>Skylake-X</sub></b></td>
-    <td align="center"><b><sub>Sandy Bridge</sub></b></td>
-    <td align="center"><b><sub>Ivy Bridge</sub></b></td>
-    <td align="center"><b><sub>Skylake-X</sub></b></td>
+    <td align="center"><b><sub>i7-3930K</sub></b></td>
+    <td align="center"><b><sub>i7-4930K</sub></b></td>
+    <td align="center"><b><sub>i7-7820X</sub></b></td>
+    <td align="center"><b><sub>i7-3930K</sub></b></td>
+    <td align="center"><b><sub>i7-4930K</sub></b></td>
+    <td align="center"><b><sub>i7-7820X</sub></b></td>
   </tr>
 </thead>
 <tbody>
@@ -263,14 +263,14 @@ As a quick preview of Vortex sorting and streaming performance, in the tables be
 <table align="center">
 <thead>
   <tr>
-    <th colspan="7"><b>4x RAM-Sized File I/O Speed (MB/s)</b></th>
+    <th colspan="7"><b>File I/O Speed (MB/s)</b></th>
   </tr>
 </thead>
 <tbody>
   <tr>
     <td rowspan="2" align="center"><b><sub>Framework</sub></b></td>
-    <td colspan="2" align="center"><b><sub>Sandy Bridge</sub></b></td>
-    <td colspan="2" align="center"><b><sub>Skylake-X</sub></b></td>
+    <td colspan="2" align="center"><b><sub>24-disk RAID</sub></b></td>
+    <td colspan="2" align="center"><b><sub>Samsung Evo 960 SSD</sub></b></td>
     <td rowspan="2" align="center"><b><sub>CPU</sub></b></td>
     <td rowspan="2" align="center"><b><sub>RAM</sub></b></td>
   </tr>
