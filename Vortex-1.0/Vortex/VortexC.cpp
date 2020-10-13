@@ -1,21 +1,21 @@
-/*--------------------------------------------------------------------------------------------
- - Vortex: Extreme-Performance Memory Abstractions for Data-Intensive Streaming Applications -
- - Copyright(C) 2020 Carson Hanel, Arif Arman, Di Xiao, John Keech, Dmitri Loguinov          -
- - Produced via research carried out by the Texas A&M Internet Research Lab                  -
- -                                                                                           -
- - This program is free software : you can redistribute it and/or modify                     -
- - it under the terms of the GNU General Public License as published by                      -
- - the Free Software Foundation, either version 3 of the License, or                         -
- - (at your option) any later version.                                                       -
- -                                                                                           -
- - This program is distributed in the hope that it will be useful,                           -
- - but WITHOUT ANY WARRANTY; without even the implied warranty of                            -
- - MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.See the                               -
- - GNU General Public License for more details.                                              -
- -                                                                                           -
- - You should have received a copy of the GNU General Public License                         -
- - along with this program. If not, see < http://www.gnu.org/licenses/>.                     -
- --------------------------------------------------------------------------------------------*/
+/*------------------------------------------------------------------------------------------------
+ -   Vortex: Extreme-Performance Memory Abstractions for Data-Intensive Streaming Applications   -
+ -   Copyright(C) 2020 Carson Hanel, Arif Arman, Di Xiao, John Keech, Dmitri Loguinov            -
+ -   Produced via research carried out by the Texas A&M Internet Research Lab                    -
+ -																							     -
+ -	 This program is free software : you can redistribute it and/or modify						 -
+ -	 it under the terms of the GNU General Public License as published by						 -
+ -	 the Free Software Foundation, either version 3 of the License, or							 -
+ -	 (at your option) any later version.													     -
+ -																								 -
+ -	 This program is distributed in the hope that it will be useful,							 -
+ -	 but WITHOUT ANY WARRANTY; without even the implied warranty of								 -
+ -	 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.See the								 -
+ -	 GNU General Public License for more details.												 -
+ -																								 -
+ -	 You should have received a copy of the GNU General Public License							 -
+ -	 along with this program. If not, see < http://www.gnu.org/licenses/>.						 -
+ ------------------------------------------------------------------------------------------------*/
 #include "stdafx.h"
 
 // initializes a VortexC stream
@@ -40,6 +40,7 @@ VortexC::VortexC(uint64_t size, uint64_t blockSizePower, uint64_t comeBackConsum
 	sp->BufferAlloc(size, size, 0, &bcWriter);
 	readBuf  = bcReader.bufMain;
 	writeBuf = bcWriter.bufMain;
+	lastWriterPosition = 0;
 
 	// add the streams to the handler
 	streamManager.AddStream(bcReader.bufMain, bcReader.bufMain + bcReader.reserveSize, this);
@@ -47,6 +48,7 @@ VortexC::VortexC(uint64_t size, uint64_t blockSizePower, uint64_t comeBackConsum
 	printf("Vortex-C with %lld GB, chunk %.1f GB, block %llu KB, page %llu KB, M %llu, L %llu, N %llu\n",
 		bcReader.reserveSize / (1 << 30), (double)bcReader.chunkSize / (1 << 30),
 		sp->blockSize / 1024, sp->pageSize / 1024, comeBackConsumer, comeBackProducer, writeAhead);
+	cs = (CSType*)Syscall.MakeCS();
 }
 
 // deconstructs a VortexC stream
@@ -60,12 +62,20 @@ VortexC::~VortexC() {
 	sp->BufferFree(&bcWriter);
 #endif
 	delete sp;
+	Syscall.DeleteCS(cs);
 }
 
 // handles stream write faults
 void VortexC::HandleWriteFault(char* faultAddress, char* alignedFaultAddress) {
 	uint64_t index = (alignedFaultAddress - writeBuf) >> sp->blockSizePower;
 
+	//printf("Vortex-C write fault in block %lld @ %p\n", index, faultAddress);
+
+	// detect if writer goes back
+	if (lastWriterPosition != NULL && faultAddress < lastWriterPosition - (comeBackProducer << sp->blockSizePower))
+		ReportError("producer violating comeback L; lastFault %llu, currentFault %p\n", lastWriterPosition, faultAddress);
+
+	lastWriterPosition = faultAddress;
 	// added for PFN-based mapping
 	uint64_t pagesNeeded, pageSpacing = (faultAddress - writeBuf) >> sp->pageSizePower;
 	if (index != 0)       pagesNeeded = sp->pagesPerBlock;
@@ -86,34 +96,43 @@ void VortexC::HandleWriteFault(char* faultAddress, char* alignedFaultAddress) {
 #else
 	pBlock->SetPFN(sp->GetNewBlock(pagesNeeded, (BlockType*)pBlock->GetPFN()));
 #endif
-	blockState[index]  = pBlock;
-
 	// record block data and map the block.
 	sp->MapBlock(&bcWriter, alignedFaultAddress, pagesNeeded, (BlockType*)pBlock->GetPFN());
 	pBlock->virtualPtr = alignedFaultAddress;
-	pBlock->numPages   = pagesNeeded;
+	pBlock->numPages = pagesNeeded;
+
+	Syscall.EnterCS(cs);
+	blockState[index]  = pBlock;
+	Syscall.LeaveCS(cs);
 }
 
 // handles stream read faults
 void VortexC::HandleReadFault(char* alignedFaultAddress) {
 	int64_t index = (alignedFaultAddress - readBuf) >> sp->blockSizePower;
-	while (curReadOff < index) {
+	
+	while (curReadOff < index) 
+	{
 		curReadOff++;
 
 		// unmap empty blocks below the lower end of consumer window; must be prior to releasing semEmpty
 		int64_t emptyUnmapOffset = curReadOff - (comeBackConsumer + 1);
-		if (emptyUnmapOffset > -1) {
+		if (emptyUnmapOffset > -1) 
+		{
+			Syscall.EnterCS(cs);
 			map<uint64_t, BlockState*>::iterator it = blockState.find(emptyUnmapOffset);
-			if (it != blockState.end()) {
-				// unmap the block from where it is currently mapped for reuse
-				BlockState* block = it->second;
-				bool isReader     = IsReaderAddress(block->virtualPtr);
-				BufferConfig* bc  = isReader ? &bcReader : &bcWriter;
-				sp->UnmapBlock(bc, block->virtualPtr, block->numPages);
-				sp->ReturnFreeBlock(block->numPages, (BlockType*)block->GetPFN());
-				delete it->second;
-				blockState.erase(it);
-			}
+			if (it == blockState.end())
+				ReportError("unmapping an empty block %lld\n", emptyUnmapOffset);		
+			BlockState* block = it->second;
+			blockState.erase(it);
+			Syscall.LeaveCS(cs);
+
+			// unmap the block from where it is currently mapped for reuse
+
+			bool isReader = IsReaderAddress(block->virtualPtr);
+			BufferConfig* bc = isReader ? &bcReader : &bcWriter;
+			sp->UnmapBlock(bc, block->virtualPtr, block->numPages);
+			sp->ReturnFreeBlock(block->numPages, (BlockType*)block->GetPFN());
+			delete it->second;
 		}
 
 		// release the semaphore, alerting the Producer to the available block
@@ -123,18 +142,23 @@ void VortexC::HandleReadFault(char* alignedFaultAddress) {
 		Syscall.WaitSemaphore(semFull);
 
 		// if we're within M blocks of the current read fault, start mapping the blocks
-		if (curReadOff + (int64_t) comeBackProducer >= index) {
+		if (curReadOff + (int64_t) comeBackProducer >= index) 
+		{
+			Syscall.EnterCS(cs);
 			map<uint64_t, BlockState*>::iterator it = blockState.find(curReadOff);
-			if (it != blockState.end()) {
-				BlockState* block = it->second;
+			if (it == blockState.end())
+				ReportError("mapping down empty block %lld\n", curReadOff);			
+			Syscall.LeaveCS(cs);
 
-				// unmap from the writer buffer
-				sp->UnmapBlock(&bcWriter, block->virtualPtr, block->numPages);
+			BlockState* block = it->second;
+			
+			// unmap from the writer buffer
+			sp->UnmapBlock(&bcWriter, block->virtualPtr, block->numPages);
 
-				// map to reader buffer
-				sp->MapBlock(&bcReader, readBuf + curReadOff * sp->blockSize, block->numPages, (BlockType*)block->GetPFN());
-				block->virtualPtr = readBuf + curReadOff * sp->blockSize;
-			}
+			// map to reader buffer
+			sp->MapBlock(&bcReader, readBuf + curReadOff * sp->blockSize, block->numPages, (BlockType*)block->GetPFN());
+			block->virtualPtr = readBuf + curReadOff * sp->blockSize;
+			//printf("	mapped down block %lld\n", curReadOff);
 		}
 	}
 }
@@ -170,20 +194,20 @@ bool VortexC::ProcessFault(int faultType, char* faultAddress) {
 
 // resets the stream to the beginning state
 void VortexC::Reset(void) {
-	int leaked = 0;
-	// scan for still-mapped blocks
+	Syscall.EnterCS(cs);
 	map<uint64_t, BlockState*>::iterator it = blockState.begin();
 	while (it != blockState.end()) {
 		BlockState* block = it->second;
-		bool isReader     = IsReaderAddress(block->virtualPtr);
-		BufferConfig* bc  = isReader ? &bcReader : &bcWriter;
+		it = blockState.erase(it);
+		Syscall.LeaveCS(cs);
+		bool isReader = IsReaderAddress(block->virtualPtr);
+		BufferConfig* bc = isReader ? &bcReader : &bcWriter;
 		sp->UnmapBlock(bc, block->virtualPtr, block->numPages);
 		sp->ReturnFreeBlock(block->numPages, (BlockType*)block->GetPFN());
-		delete it->second;
-		leaked++;
-		it++;
+		delete block;
+		Syscall.EnterCS(cs);
 	}
-	blockState.clear();
+	Syscall.LeaveCS(cs);
 	curReadOff = -1;
 }
 
