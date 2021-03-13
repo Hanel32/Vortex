@@ -194,17 +194,20 @@ bool VortexC::ProcessFault(int faultType, char* faultAddress) {
 
 // resets the stream to the beginning state
 void VortexC::Reset(void) {
+	// scan for still-mapped blocks
 	Syscall.EnterCS(cs);
 	map<uint64_t, BlockState*>::iterator it = blockState.begin();
 	while (it != blockState.end()) {
 		BlockState* block = it->second;
-		it = blockState.erase(it);
+		it = blockState.erase(it);		// C++11
 		Syscall.LeaveCS(cs);
-		bool isReader = IsReaderAddress(block->virtualPtr);
-		BufferConfig* bc = isReader ? &bcReader : &bcWriter;
+
+		bool isReader     = IsReaderAddress(block->virtualPtr);
+		BufferConfig* bc  = isReader ? &bcReader : &bcWriter;
 		sp->UnmapBlock(bc, block->virtualPtr, block->numPages);
 		sp->ReturnFreeBlock(block->numPages, (BlockType*)block->GetPFN());
 		delete block;
+
 		Syscall.EnterCS(cs);
 	}
 	Syscall.LeaveCS(cs);
