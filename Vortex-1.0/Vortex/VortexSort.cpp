@@ -94,7 +94,7 @@ VortexSort<ItemType>::VortexSort(uint64_t size, uint64_t blockSizePower) {
 	printf(")\n");
 
 	// setup bucket pointers and a stream pool for memory management
-	buckets = (ItemType**)Syscall.AllocAligned(sizeof(ItemType*) * nBuckets[0] * maxDepth, 64);
+	buckets = (ItemType**)Syscall.AllocAligned(sizeof(ItemType*) * nBuckets[0] * (maxDepth + 1), 64);
 	sp      = new StreamPool(blockSizePower);
 
 	// setup RAM necessary for stream pool
