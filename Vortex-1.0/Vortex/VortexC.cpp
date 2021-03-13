@@ -132,7 +132,7 @@ void VortexC::HandleReadFault(char* alignedFaultAddress) {
 			BufferConfig* bc = isReader ? &bcReader : &bcWriter;
 			sp->UnmapBlock(bc, block->virtualPtr, block->numPages);
 			sp->ReturnFreeBlock(block->numPages, (BlockType*)block->GetPFN());
-			delete it->second;
+			delete block;
 		}
 
 		// release the semaphore, alerting the Producer to the available block
