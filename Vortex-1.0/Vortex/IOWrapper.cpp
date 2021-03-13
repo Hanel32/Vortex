@@ -40,7 +40,7 @@ bool IOWrapper::SaveFilename(char* fname) {
 	}
 
 	// save a copy since the file needs to be reopened at the end to set its size
-	strcpy_s(filename, strlen(fname), fname);
+	strcpy_s(filename, strlen(fname)+1, fname);
 	return true;
 }
 
