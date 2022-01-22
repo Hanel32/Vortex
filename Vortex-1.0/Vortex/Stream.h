@@ -22,11 +22,20 @@
 // stream buffer configuration
 class BufferConfig {
 public:
+	CSType* chunkCS;
 	uint64_t reserveSize, chunkSize;
 	map<uint64_t, uint64_t>	chunkTree;
 	char* lastFault;
 	char* bufMain;
 	char* buf;
+	bool lockChunkTree = false;
+	BufferConfig() {
+	    chunkCS       = (CSType*)Syscall.MakeCS();
+	    lockChunkTree = true;
+	}
+	~BufferConfig() {
+	    Syscall.DeleteCS(chunkCS);
+	}
 };
 
 // stream block wrapper
