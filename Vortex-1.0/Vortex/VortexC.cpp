@@ -83,7 +83,7 @@ void VortexC::HandleWriteFault(char* faultAddress, char* alignedFaultAddress) {
 
 	// release the next full block
 	int64_t writerReleaseOffset = index - (comeBackProducer + 1);
-	if (writerReleaseOffset > -1) 
+	if (writerReleaseOffset >= 0) 
 		Syscall.FreeSemaphore(semFull, 1);
 	
 	// wait for the next empty block
@@ -116,7 +116,7 @@ void VortexC::HandleReadFault(char* alignedFaultAddress) {
 
 		// unmap empty blocks below the lower end of consumer window; must be prior to releasing semEmpty
 		int64_t emptyUnmapOffset = curReadOff - (comeBackConsumer + 1);
-		if (emptyUnmapOffset > -1) 
+		if (emptyUnmapOffset >= 0) 
 		{
 			Syscall.EnterCS(cs);
 			map<uint64_t, BlockState*>::iterator it = blockState.find(emptyUnmapOffset);
