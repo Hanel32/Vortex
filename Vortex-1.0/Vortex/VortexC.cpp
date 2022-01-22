@@ -142,7 +142,7 @@ void VortexC::HandleReadFault(char* alignedFaultAddress) {
 		Syscall.WaitSemaphore(semFull);
 
 		// if we're within M blocks of the current read fault, start mapping the blocks
-		if (curReadOff + (int64_t) comeBackProducer >= index) 
+		if (curReadOff + (int64_t) comeBackConsumer >= index) 
 		{
 			Syscall.EnterCS(cs);
 			map<uint64_t, BlockState*>::iterator it = blockState.find(curReadOff);
