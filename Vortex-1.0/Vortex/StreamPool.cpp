@@ -135,12 +135,14 @@ void StreamPool::MapBlock(BufferConfig *bc, char* blockAddress, uint64_t numPage
 	// check for chunking
 	uint64_t chunk = (blockAddress - bc->bufMain) / bc->chunkSize;
 	if (chunk != 0) {
+		if (bc->lockChunkTree) Syscall.EnterCS(bc->chunkCS);
 		map<uint64_t, uint64_t>::iterator it = bc->chunkTree.find(chunk);
 		if (it == bc->chunkTree.end()) {
 			ConvertChunkToPhysical(bc, blockAddress);
 			bc->chunkTree.insert({ chunk, 1 });
 		}
 		else it->second++;
+		if (bc->lockChunkTree) Syscall.LeaveCS(bc->chunkCS);
 	}
 #endif
 	// map the block
@@ -156,11 +158,13 @@ void StreamPool::UnmapBlock(BufferConfig* bc, char* blockAddress, uint64_t pages
 	uint64_t chunk      = (blockAddress - bc->bufMain) / bc->chunkSize;
 	uint64_t chunkFault = (bc->lastFault - bc->bufMain) / bc->chunkSize;
 	if (chunk > 0) {
+		if (bc->lockChunkTree) Syscall.EnterCS(bc->chunkCS);
 		map<uint64_t, uint64_t>::iterator it = bc->chunkTree.find(chunk);
 		if (--it->second == 0 && chunk < chunkFault) {
 			FreeChunk(bc, bc->bufMain + chunk * bc->chunkSize);
 			bc->chunkTree.erase(it);
 		}
+		if (bc->lockChunkTree) Syscall.LeaveCS(bc->chunkCS);
 	}
 #endif
 }
