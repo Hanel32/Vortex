@@ -20,7 +20,7 @@
 // Hybrid System Types and Functions Definitions
 #include <inttypes.h>
 #include <stdio.h>
-#include "Stream.h"
+
 #ifdef _WIN32
 // Windows definitions and headers
 #include <Windows.h>
