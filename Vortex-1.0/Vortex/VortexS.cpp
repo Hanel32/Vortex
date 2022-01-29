@@ -90,7 +90,7 @@ void VortexS::HandleWriteFault(char* faultAddress, char* alignedFaultAddress) {
 	// set the write flag when installing a guard page immediately after the block with the last guard fault
 	if (index == lastReadFaultBlock + 2) writeFlag = true;
 
-	// if the current block is already being used & we hit its guard, put that page back
+	// set up guard page at the start of previous block (if one exists)
 	map<uint64_t, BlockState*>::iterator prev = physicalBlockMapped.find(index - 1);
 	if (prev != physicalBlockMapped.end()) 
 		sp->InstallGuard(prev->second->virtualPtr);
