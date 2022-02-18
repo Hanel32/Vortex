@@ -172,6 +172,7 @@ void sys::DeleteCS(CSType* cs) {
 #else
 	pthread_mutex_destroy(cs);
 #endif
+	delete cs;
 }
 
 // creates a condition variable and returns a pointer
