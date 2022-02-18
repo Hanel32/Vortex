@@ -31,13 +31,13 @@ public:
 	bool lockChunkTree;
 	BufferConfig(bool lock) {
 	    lockChunkTree = lock;
-		if (lockChunkTree) 
-			chunkCS = (CSType*)Syscall.MakeCS();
+	    if (lockChunkTree) 
+	        chunkCS = (CSType*)Syscall.MakeCS();
 	}
 	~BufferConfig() {
 	    Syscall.DeleteCS(chunkCS);
-		if (lockChunkTree)
-			delete chunkCS;
+	    if (lockChunkTree)
+	        delete chunkCS;
 	}
 };
 
