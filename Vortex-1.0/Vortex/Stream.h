@@ -35,9 +35,10 @@ public:
 	        chunkCS = (CSType*)Syscall.MakeCS();
 	}
 	~BufferConfig() {
-	    Syscall.DeleteCS(chunkCS);
-	    if (lockChunkTree)
+	    if (lockChunkTree) {
+		Syscall.DeleteCS(chunkCS);
 	        delete chunkCS;
+	    }
 	}
 };
 
