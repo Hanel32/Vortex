@@ -36,17 +36,19 @@ VortexC::VortexC(uint64_t size, uint64_t blockSizePower, uint64_t comeBackConsum
 	sp->AdjustPoolPhysicalMemory((comeBackConsumer + comeBackProducer + writeAhead + 1) * sp->pagesPerBlock);		// M+L+N+1 blocks
 
 	// allocate virtual memory
-	sp->BufferAlloc(size, size, 0, &bcReader);
-	sp->BufferAlloc(size, size, 0, &bcWriter);
-	readBuf  = bcReader.bufMain;
-	writeBuf = bcWriter.bufMain;
+	bcReader = new BufferConfig(false);
+	bcWriter = new BufferConfig(true);
+	sp->BufferAlloc(size, size, 0, bcReader);
+	sp->BufferAlloc(size, size, 0, bcWriter);
+	readBuf  = bcReader->bufMain;
+	writeBuf = bcWriter->bufMain;
 	lastWriterPosition = 0;
 
 	// add the streams to the handler
-	streamManager.AddStream(bcReader.bufMain, bcReader.bufMain + bcReader.reserveSize, this);
-	streamManager.AddStream(bcWriter.bufMain, bcWriter.bufMain + bcWriter.reserveSize, this);
+	streamManager.AddStream(bcReader->bufMain, bcReader->bufMain + bcReader->reserveSize, this);
+	streamManager.AddStream(bcWriter->bufMain, bcWriter->bufMain + bcWriter->reserveSize, this);
 	printf("Vortex-C with %lld GB, chunk %.1f GB, block %llu KB, page %llu KB, M %llu, L %llu, N %llu\n",
-		bcReader.reserveSize / (1 << 30), (double)bcReader.chunkSize / (1 << 30),
+		bcReader->reserveSize / (1 << 30), (double)bcReader->chunkSize / (1 << 30),
 		sp->blockSize / 1024, sp->pageSize / 1024, comeBackConsumer, comeBackProducer, writeAhead);
 	cs = (CSType*)Syscall.MakeCS();
 }
@@ -54,14 +56,16 @@ VortexC::VortexC(uint64_t size, uint64_t blockSizePower, uint64_t comeBackConsum
 // deconstructs a VortexC stream
 VortexC::~VortexC() {
 	Reset();
-	streamManager.RemoveStream(bcReader.bufMain);
-	streamManager.RemoveStream(bcWriter.bufMain);
+	streamManager.RemoveStream(bcReader->bufMain);
+	streamManager.RemoveStream(bcWriter->bufMain);
 #ifdef _WIN32
 	// only needed for chunking
-	sp->BufferFree(&bcReader);
-	sp->BufferFree(&bcWriter);
+	sp->BufferFree(bcReader);
+	sp->BufferFree(bcWriter);
 #endif
 	delete sp;
+	delete bcReader;
+	delete bcWriter;
 	Syscall.DeleteCS(cs);
 }
 
@@ -97,7 +101,7 @@ void VortexC::HandleWriteFault(char* faultAddress, char* alignedFaultAddress) {
 	pBlock->SetPFN(sp->GetNewBlock(pagesNeeded, (BlockType*)pBlock->GetPFN()));
 #endif
 	// record block data and map the block.
-	sp->MapBlock(&bcWriter, alignedFaultAddress, pagesNeeded, (BlockType*)pBlock->GetPFN());
+	sp->MapBlock(bcWriter, alignedFaultAddress, pagesNeeded, (BlockType*)pBlock->GetPFN());
 	pBlock->virtualPtr = alignedFaultAddress;
 	pBlock->numPages = pagesNeeded;
 
@@ -129,7 +133,7 @@ void VortexC::HandleReadFault(char* alignedFaultAddress) {
 			// unmap the block from where it is currently mapped for reuse
 
 			bool isReader = IsReaderAddress(block->virtualPtr);
-			BufferConfig* bc = isReader ? &bcReader : &bcWriter;
+			BufferConfig* bc = isReader ? bcReader : bcWriter;
 			sp->UnmapBlock(bc, block->virtualPtr, block->numPages);
 			sp->ReturnFreeBlock(block->numPages, (BlockType*)block->GetPFN());
 			delete block;
@@ -153,10 +157,10 @@ void VortexC::HandleReadFault(char* alignedFaultAddress) {
 			BlockState* block = it->second;
 			
 			// unmap from the writer buffer
-			sp->UnmapBlock(&bcWriter, block->virtualPtr, block->numPages);
+			sp->UnmapBlock(bcWriter, block->virtualPtr, block->numPages);
 
 			// map to reader buffer
-			sp->MapBlock(&bcReader, readBuf + curReadOff * sp->blockSize, block->numPages, (BlockType*)block->GetPFN());
+			sp->MapBlock(bcReader, readBuf + curReadOff * sp->blockSize, block->numPages, (BlockType*)block->GetPFN());
 			block->virtualPtr = readBuf + curReadOff * sp->blockSize;
 			//printf("	mapped down block %lld\n", curReadOff);
 		}
@@ -170,22 +174,22 @@ bool VortexC::ProcessFault(int faultType, char* faultAddress) {
 		uint64_t offset           = faultAddress - writeBuf;
 		offset                    = (offset >> sp->blockSizePower) << sp->blockSizePower;
 		char* alignedFaultAddress = writeBuf + offset;
-		bcWriter.lastFault        = alignedFaultAddress;
-		if (offset >= 0 && offset < bcWriter.reserveSize)
+		bcWriter->lastFault       = alignedFaultAddress;
+		if (offset >= 0 && offset < bcWriter->reserveSize)
 			HandleWriteFault(faultAddress, alignedFaultAddress);
 		else
-			ReportError("Write offset %lld, while the valid range is [%lld, %lld]\n", offset, 0, bcWriter.reserveSize);
+			ReportError("Write offset %lld, while the valid range is [%lld, %lld]\n", offset, 0, bcWriter->reserveSize);
 	}
 	// read fault
 	else if (faultType == EXCEPTION_READ_FAULT) {
 		uint64_t offset           = faultAddress - readBuf;
 		offset                    = (offset >> sp->blockSizePower) << sp->blockSizePower;
 		char* alignedFaultAddress = readBuf + offset;
-		bcReader.lastFault        = alignedFaultAddress;
-		if (offset >= 0 && offset < bcReader.reserveSize)
+		bcReader->lastFault       = alignedFaultAddress;
+		if (offset >= 0 && offset < bcReader->reserveSize)
 			HandleReadFault(alignedFaultAddress);
 		else
-			ReportError("Read offset %lld, while the valid range is [%lld, %lld]\n", offset, 0, bcReader.reserveSize);
+			ReportError("Read offset %lld, while the valid range is [%lld, %lld]\n", offset, 0, bcReader->reserveSize);
 	}
 	else
 		ReportError("invalid fault address %p, alignment puts it out of boundaries\n", faultAddress);
@@ -203,7 +207,7 @@ void VortexC::Reset(void) {
 		Syscall.LeaveCS(cs);
 
 		bool isReader     = IsReaderAddress(block->virtualPtr);
-		BufferConfig* bc  = isReader ? &bcReader : &bcWriter;
+		BufferConfig* bc  = isReader ? bcReader : bcWriter;
 		sp->UnmapBlock(bc, block->virtualPtr, block->numPages);
 		sp->ReturnFreeBlock(block->numPages, (BlockType*)block->GetPFN());
 		delete block;
@@ -257,5 +261,5 @@ uint64_t VortexC::GetBlockSize(void) {
 
 // checks if a pointer is pointing to the read buffer
 bool VortexC::IsReaderAddress(char* addr) {
-	return addr >= bcReader.bufMain && addr < bcReader.bufMain + bcReader.reserveSize;
+	return addr >= bcReader->bufMain && addr < bcReader->bufMain + bcReader->reserveSize;
 }

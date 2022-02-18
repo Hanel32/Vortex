@@ -21,12 +21,13 @@
 // initializes a VortexS stream
 VortexS::VortexS(uint64_t memoryRequired, uint64_t chunkSize, StreamPool *sp, uint64_t myID) :
 	sp(sp), myID(myID) {
-	sp->BufferAlloc(memoryRequired, chunkSize, myID, &bc);
-	streamManager.AddStream(bc.bufMain, bc.bufMain + bc.reserveSize, this);
+	bc = new BufferConfig(false);
+	sp->BufferAlloc(memoryRequired, chunkSize, myID, bc);
+	streamManager.AddStream(bc->bufMain, bc->bufMain + bc->reserveSize, this);
 
 	// cache-line stagger; this offset is always less than one page, so the guard is still triggered
-	bufUser            = bc.buf + 64 * (myID & 63);
-	diff               = (bufUser - bc.bufMain) / sp->blockSize;
+	bufUser            = bc->buf + 64 * (myID & 63);
+	diff               = (bufUser - bc->bufMain) / sp->blockSize;
 	writeFlag          = false;
 	lastReadFaultAddr  = 0;
 	lastWriteFaultAddr = 0;
@@ -35,11 +36,12 @@ VortexS::VortexS(uint64_t memoryRequired, uint64_t chunkSize, StreamPool *sp, ui
 // deconstructs a VortexS stream
 VortexS::~VortexS() {
 	Reset();
-	streamManager.RemoveStream(bc.bufMain);
+	streamManager.RemoveStream(bc->bufMain);
 #ifdef _WIN32
 	// only used for chunking
-	sp->BufferFree(&bc);
+	sp->BufferFree(bc);
 #endif
+	delete bc;
 }
 
 // retrieves the read buffer
@@ -56,7 +58,7 @@ char* VortexS::GetWriteBuf(void) {
 uint64_t VortexS::GetFirstBlockSize() {
 #ifdef _WIN32
 	// Windows can save memory on the first block by only mapping needed pages
-	uint64_t pageSpacing = (bc.buf - bc.bufMain) >> sp->pageSizePower;
+	uint64_t pageSpacing = (bc->buf - bc->bufMain) >> sp->pageSizePower;
 	uint64_t pagesNeeded = sp->pagesPerBlock - (pageSpacing & (sp->pagesPerBlock - 1));
 	return   pagesNeeded;
 #else
@@ -68,24 +70,24 @@ uint64_t VortexS::GetFirstBlockSize() {
 // handles stream write faults
 void VortexS::HandleWriteFault(char* faultAddress, char* alignedFaultAddress) {
 	// calculate the current block's index
-	int64_t index = ((alignedFaultAddress - bc.bufMain) >> sp->blockSizePower) - diff;
+	int64_t index = ((alignedFaultAddress - bc->bufMain) >> sp->blockSizePower) - diff;
 
 	// added for PFN-based mapping
 	uint64_t pagesNeeded, pageSpacing;
 #ifdef _WIN32
 	// Windows can save memory on the first block by only mapping needed pages
-	if (index != 0) pageSpacing = (alignedFaultAddress - bc.bufMain) >> sp->pageSizePower;
-	else            pageSpacing = (faultAddress - bc.bufMain) >> sp->pageSizePower;
+	if (index != 0) pageSpacing = (alignedFaultAddress - bc->bufMain) >> sp->pageSizePower;
+	else            pageSpacing = (faultAddress - bc->bufMain) >> sp->pageSizePower;
 #else
 	// Linux requires blockSize aligned memory mappings
-	pageSpacing = (alignedFaultAddress - bc.bufMain) >> sp->pageSizePower;
+	pageSpacing = (alignedFaultAddress - bc->bufMain) >> sp->pageSizePower;
 #endif
 	if (index != 0) pagesNeeded = sp->pagesPerBlock;
 	else            pagesNeeded = GetFirstBlockSize();
-	char*           dest        = bc.bufMain + pageSpacing * sp->pageSize;
+	char*           dest        = bc->bufMain + pageSpacing * sp->pageSize;
 
 	// the block with the last read fault
-	int64_t lastReadFaultBlock = ((lastReadFaultAddr - bc.bufMain) >> sp->blockSizePower) - diff;
+	int64_t lastReadFaultBlock = ((lastReadFaultAddr - bc->bufMain) >> sp->blockSizePower) - diff;
 
 	// set the write flag when installing a guard page immediately after the block with the last guard fault
 	if (index == lastReadFaultBlock + 2) writeFlag = true;
@@ -109,7 +111,7 @@ void VortexS::HandleWriteFault(char* faultAddress, char* alignedFaultAddress) {
 		pBlock->SetPFN(sp->GetNewBlock(pagesNeeded, (BlockType*)pBlock->GetPFN()));
 #endif
 		// record block data and map the block
-		sp->MapBlock(&bc, dest, pagesNeeded, (BlockType*)pBlock->GetPFN());
+		sp->MapBlock(bc, dest, pagesNeeded, (BlockType*)pBlock->GetPFN());
 		lastMapAddr                = pBlock->virtualPtr = dest;
 		pBlock->numPages           = pagesNeeded;
 		physicalBlockMapped[index] = pBlock;
@@ -119,7 +121,7 @@ void VortexS::HandleWriteFault(char* faultAddress, char* alignedFaultAddress) {
 // handles stream read faults
 void VortexS::HandleReadFault(char* faultAddress, char* alignedFaultAddress) {
 	// calculate the current block's index
-	int64_t index = ((alignedFaultAddress - bc.bufMain) >> sp->blockSizePower) - diff;
+	int64_t index = ((alignedFaultAddress - bc->bufMain) >> sp->blockSizePower) - diff;
 
 	// if the most-recently-used block can be freed, do so
 	bool aligned      = faultAddress == alignedFaultAddress;
@@ -129,7 +131,7 @@ void VortexS::HandleReadFault(char* faultAddress, char* alignedFaultAddress) {
 		map<uint64_t, BlockState*>::iterator it = physicalBlockMapped.find(index - 1);
 		if (it != physicalBlockMapped.end()) {
 			BlockState* block = it->second;
-			sp->UnmapBlock(&bc, block->virtualPtr, block->numPages);
+			sp->UnmapBlock(bc, block->virtualPtr, block->numPages);
 			sp->ReturnFreeBlock(block->numPages, (BlockType*)block->GetPFN());
 			delete it->second;
 			physicalBlockMapped.erase(it);
@@ -153,10 +155,10 @@ void VortexS::HandleReadFault(char* faultAddress, char* alignedFaultAddress) {
 // directs valid stream access violations
 bool VortexS::ProcessFault(int faultType, char* faultAddress) {
 	// align the fault address
-	uint64_t offset = faultAddress - bc.bufMain;
+	uint64_t offset = faultAddress - bc->bufMain;
 	offset = (offset >> sp->blockSizePower) << sp->blockSizePower;
-	char* alignedFaultAddress = bc.bufMain + offset;
-	bc.lastFault = alignedFaultAddress;
+	char* alignedFaultAddress = bc->bufMain + offset;
+	bc->lastFault = alignedFaultAddress;
 
 	// process the fault
 	if (faultType == EXCEPTION_WRITE_FAULT)
@@ -179,7 +181,7 @@ void VortexS::Reset(void) {
 			// neeeded to remove any remaining guard pages - Windows does this implicitly
 			Syscall.RemoveGuard(pBlock->virtualPtr);
 #endif
-			sp->UnmapBlock(&bc, pBlock->virtualPtr, pBlock->numPages);
+			sp->UnmapBlock(bc, pBlock->virtualPtr, pBlock->numPages);
 			sp->ReturnFreeBlock(pBlock->numPages, (BlockType*)pBlock->GetPFN());
 			delete it->second;
 		}

@@ -28,13 +28,16 @@ public:
 	char* lastFault;
 	char* bufMain;
 	char* buf;
-	bool lockChunkTree = false;
-	BufferConfig() {
-	    chunkCS       = (CSType*)Syscall.MakeCS();
-	    lockChunkTree = true;
+	bool lockChunkTree;
+	BufferConfig(bool lock) {
+	    lockChunkTree = lock;
+		if (lockChunkTree) 
+			chunkCS = (CSType*)Syscall.MakeCS();
 	}
 	~BufferConfig() {
 	    Syscall.DeleteCS(chunkCS);
+		if (lockChunkTree)
+			delete chunkCS;
 	}
 };
 

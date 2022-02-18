@@ -24,7 +24,8 @@ class StreamPool;
 class VortexC : public Stream {
 	// base stream structures
 	map<uint64_t, BlockState*> blockState;
-	BufferConfig bcReader, bcWriter;
+	BufferConfig* bcReader;
+	BufferConfig* bcWriter;
 	StreamPool*  sp;
 
 	// stream variables

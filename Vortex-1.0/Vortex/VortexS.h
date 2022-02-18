@@ -21,8 +21,8 @@ class StreamPool;
 class VortexS : public Stream {
 	// base stream structures
 	map<uint64_t, BlockState*> physicalBlockMapped;
-	StreamPool*  sp;
-	BufferConfig bc;
+	StreamPool*   sp;
+	BufferConfig* bc;
 
 	// stream variables
 	char*		 bufUser;
